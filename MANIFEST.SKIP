@@ -1,0 +1,15 @@
+^.git\b
+\.bak$
+\.log$
+\.old$
+\.swp$
+\.tar$
+\.tar.gz$
+\bCVS/
+\bdebian/\w+/
+\bdebian/\w+.substvars$
+^pm_to_blib\b
+^Makefile$
+^blib/
+^\w*-stamp$
+~$

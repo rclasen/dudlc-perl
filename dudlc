@@ -1,0 +1,39 @@
+#!/usr/bin/perl -w
+
+use strict;
+use warnings;
+
+use AnyEvent::Loop;
+use AnyEvent::Dudlc;
+
+my $dudl = AnyEvent::Dudlc->new(
+	host		=> 'localhost',
+	user		=> 'lirc',
+	pass		=> 'lirc',
+);
+
+$dudl->reg_cb(
+	connecting	=> sub {
+		print "reconnect attempt\n";
+	},
+	connected	=> sub {
+		print "connected\n";
+	},
+	authenticated	=> sub {
+		print "authenticated\n";
+	},
+	error	=> sub {
+		print "error: @_\n";
+	},
+	disconnect	=> sub {
+		print "disconnected\n";
+	},
+	bcast	=> sub {
+		print "bcast\n";
+	},
+);
+
+$dudl->connect;
+
+AnyEvent::Loop::run;
+

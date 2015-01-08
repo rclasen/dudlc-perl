@@ -1,0 +1,14 @@
+Source: libanyevent-dudlc-perl
+Section: perl
+Priority: optional
+Build-Depends: debhelper (>= 5.0.0)
+Build-Depends-Indep: perl (>= 5.8.8-7etch1)
+Maintainer: Rainer Clasen <bj@zuto.de>
+Standards-Version: 3.7.2
+
+Package: libanyevent-dudlc-perl
+Architecture: all
+Depends: ${perl:Depends}, ${misc:Depends},
+ libanyevent-perl
+Description: library for accessing dudld jukebox
+ routines and helper to access the dudld jukebox

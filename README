@@ -1,0 +1,26 @@
+AnyEvent::Dudlc
+===============
+
+library to access dudld jukebox
+
+To install this module type the following:
+
+ - build and install the programs:
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+DEPENDENCIES
+
+This module requires these other modules and libraries:
+
+  AnyEvent
+
+COPYRIGHT AND LICENSE
+
+MIT License - see LICENSE file included in distribution
+
+Copyright (C) 2015 Rainer Clasen
+
