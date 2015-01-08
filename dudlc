@@ -10,30 +10,35 @@ my $dudl = AnyEvent::Dudlc->new(
 	host		=> 'localhost',
 	user		=> 'lirc',
 	pass		=> 'lirc',
-);
-
-$dudl->reg_cb(
-	connecting	=> sub {
-		print "reconnect attempt\n";
-	},
-	connected	=> sub {
+	on_connected	=> sub {
 		print "connected\n";
 	},
-	authenticated	=> sub {
+	on_authenticated	=> sub {
 		print "authenticated\n";
 	},
-	error	=> sub {
+	on_error	=> sub {
 		print "error: @_\n";
 	},
-	disconnect	=> sub {
+	on_disconnect	=> sub {
 		print "disconnected\n";
 	},
-	bcast	=> sub {
-		print "bcast\n";
+	on_status	=> sub {
+		print "status: @_\n";
+	},
+	on_track	=> sub {
+		print "track: TODO\n";
 	},
 );
 
-$dudl->connect;
+my $a = AnyEvent->timer(
+	after	=> 10,
+	cb	=> sub { $dudl->play },
+);
+my $b = AnyEvent->timer(
+	after	=> 20,
+	cb	=> sub { $dudl->pause },
+);
+
 
 AnyEvent::Loop::run;
 

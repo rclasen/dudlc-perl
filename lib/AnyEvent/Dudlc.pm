@@ -75,7 +75,17 @@ send a raw command to dudl and provide result to callback.
 
 =over 4
 
-=item on_TODO
+=item on_connected
+
+=item on_authenticated
+
+=item on_disconnect
+
+=itme on_error
+
+=item on_status
+
+=item on_track
 
 =back
 
@@ -85,15 +95,14 @@ package AnyEvent::Dudlc;
 use warnings;
 use strict;
 
-use base 'Object::Event'; # TODO: really?
 use Carp;
 use AnyEvent;
 use AnyEvent::Handle;
 
 our $VERSION = 0.01;
 
-#sub DEBUG(){0}
-sub DEBUG(){1}
+sub DEBUG(){0}
+#sub DEBUG(){1}
 
 sub new {
 	my( $proto, %a ) = @_;
@@ -105,6 +114,15 @@ sub new {
 		pass	=> $a{pass},
 		reconnect	=> $a{reconnect}||10,
 		timeout	=> $a{timeout}||60,
+		# connection callbacks:
+		on_connected	=> $a{on_connected},
+		on_authenticated	=> $a{on_authenticated},
+		on_disconnect	=> $a{on_disconnect},
+		on_error	=> $a{on_error},
+		# bcast callbacks:
+		on_status	=> $a{on_status},
+		on_track	=> $a{on_track},
+		# internal:
 		sock	=> undef,
 		rwatch	=> undef,
 		queue	=> [],
@@ -128,8 +146,8 @@ sub disconnect {
 
 	DEBUG && print STDERR "disconnect: $msg\n";
 	if( $self->{sock} ){
-		$self->event( 'error', $msg ) if $msg;
-		$self->event( 'disconnect' );
+		$self->{on_error} && $self->{on_error}->($msg) if $msg;
+		$self->{on_disconect} && $self->{on_disconect}->();
 		$self->{sock}->destroy;
 	}
 
@@ -148,7 +166,6 @@ sub connect {
 		if $self->{sock};
 
 	$self->{rwatch} = undef;
-	$self->event('connecting');
 
 	$self->{active} = {
 		cmd	=> 'connect',
@@ -183,7 +200,7 @@ sub connect {
 		keepalive	=> 1,
 		on_connect	=> sub {
 			my( $h, $host, $port, $retry ) = @_;
-			$self->event( 'connected' );
+			$self->{on_connected} && $self->{on_connected}->();
 			$h->push_read( line => sub { $self->_read($_[1]) } );
 		},
 		on_timeout	=> sub {
@@ -224,6 +241,26 @@ my $re_line = qr/^(\d{3})(?:([ -])(.*))?/;
 sub code_ok($){$_[0]>=200 && $_[0]<=399 };
 sub code_bcast($){$_[0]>=600 && $_[0]<=699 };
 
+our @status = qw/stopped playing paused/;
+our %bcast = (
+	640	=> sub { # newtrack
+		my( $self, $data ) = @_;
+	},
+	641	=> sub {
+		my( $self, $data ) = @_;
+		$self->{on_status} && $self->{on_status}->('stopped');
+	},
+	642	=> sub {
+		my( $self, $data ) = @_;
+		$self->{on_status} && $self->{on_status}->('paused');
+	},
+	643	=> sub {
+		my( $self, $data ) = @_;
+		$self->{on_status} && $self->{on_status}->('playing');
+	},
+	# TODO: other bcast
+);
+
 sub _read {
 	my( $self, $line ) = @_;
 
@@ -240,7 +277,9 @@ sub _read {
 
 	my $code = int $scode;
 	if( code_bcast($code) ){
-		$self->_done_bcast( $code, $data );
+		exists $bcast{$code}
+			&& $bcast{$code}
+			&& $bcast{$code}->( $self, $code, $data );
 	} else {
 		push @{$self->{response}}, $data;
 		$self->_done( code_ok($code) ) unless $cont eq '-';
@@ -265,12 +304,6 @@ sub _done {
 	$self->{active} = undef;
 
 	$self->_next;
-}
-
-sub _done_bcast {
-	my( $self, $code, $data ) = @_;
-
-	# TODO: analyze bcast: status, curtrack
 }
 
 sub _next {
@@ -331,13 +364,48 @@ sub login {
 				return;
 			}
 
-			$self->event('authenticated');
+			$self->{on_authenticated} && $self->{on_authenticated}->();
 			$cb && $cb->(@_);
 		});
 	});
 };
 
-# TODO: actual commands: status, play, pause, next, sfilterset
+
+sub status {
+	my( $self, $cb ) = @_;
+
+	$self->push('status', sub {
+		my( $ok, $d ) = @_;
+		$cb && $cb->( $ok && $d->[0] < @status
+			? $status[$d->[0]] : undef );
+	});
+}
+
+sub play {
+	my( $self, $cb ) = @_;
+
+	$self->push('play', $cb );
+}
+
+sub pause {
+	my( $self, $cb ) = @_;
+
+	$self->push('pause', $cb );
+}
+
+sub next {
+	my( $self, $cb ) = @_;
+
+	$self->push('next', $cb );
+}
+
+sub stop {
+	my( $self, $cb ) = @_;
+
+	$self->push('stop', $cb );
+}
+
+# TODO: more commands
 
 1;
 
