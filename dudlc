@@ -5,6 +5,7 @@ use warnings;
 
 use AnyEvent::Loop;
 use AnyEvent::Dudlc;
+use Data::Dumper;
 
 my $dudl = AnyEvent::Dudlc->new(
 	host		=> 'localhost',
@@ -25,15 +26,29 @@ my $dudl = AnyEvent::Dudlc->new(
 	on_status	=> sub {
 		print "status: @_\n";
 	},
+	on_filter	=> sub {
+		print "filter: @_\n";
+	},
 	on_track	=> sub {
 		print "track: TODO\n";
 	},
 );
 
-#my $a = AnyEvent->timer(
-#	after	=> 10,
-#	cb	=> sub { $dudl->play },
-#);
+my $a = AnyEvent->timer(
+	after	=> 5,
+	cb	=> sub {
+		print STDERR "timer\n";
+		$dudl->sfilterlist( sub {
+			print Dumper(@_);
+		});
+		$dudl->filterset( 'tag="hot"', sub {
+			print "filterset: @_\n";
+			$dudl->filter( sub{
+				print "filter: @_\n";
+			});
+		});
+	},
+);
 #my $b = AnyEvent->timer(
 #	after	=> 20,
 #	cb	=> sub { $dudl->pause },

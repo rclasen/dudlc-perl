@@ -63,7 +63,7 @@ TODO
 
 =over 4
 
-=item push( $raw_command, $cb->( $ok, \@data ) )
+=item push_raw( $raw_command, $cb->( $ok, \@data ) )
 
 send a raw command to dudl and provide result to callback. 
 
@@ -98,6 +98,7 @@ use strict;
 use Carp;
 use AnyEvent;
 use AnyEvent::Handle;
+use Encode;
 
 our $VERSION = 0.01;
 
@@ -122,6 +123,7 @@ sub new {
 		# bcast callbacks:
 		on_status	=> $a{on_status},
 		on_track	=> $a{on_track},
+		on_filter	=> $a{on_filter},
 		# internal:
 		sock	=> undef,
 		rwatch	=> undef,
@@ -149,7 +151,7 @@ sub disconnect {
 	DEBUG && print STDERR "disconnect: $msg\n";
 	if( $self->{sock} ){
 		$self->{on_error} && $self->{on_error}->($msg) if $msg;
-		$self->{on_disconect} && $self->{on_disconect}->();
+		$self->{on_disconnect} && $self->{on_disconnect}->();
 		$self->{sock}->destroy;
 	}
 
@@ -242,7 +244,11 @@ sub start_reconnect {
 	return;
 }
 
+############################################################
+# protocol handling
+
 my $re_line = qr/^(\d{3})(?:([ -])(.*))?/;
+my $re_sep = qr/\t/;
 
 sub code_ok($){$_[0]>=200 && $_[0]<=399 };
 sub code_bcast($){$_[0]>=600 && $_[0]<=699 };
@@ -263,6 +269,10 @@ our %bcast = (
 	643	=> sub {
 		my( $self, $data ) = @_;
 		$self->{on_status} && $self->{on_status}->('playing');
+	},
+	650	=> sub {
+		my( $self, $data ) = @_;
+		$self->{on_filter} && $self->{on_filter}->($data);
 	},
 	# TODO: other bcast
 );
@@ -286,9 +296,12 @@ sub _read {
 	if( code_bcast($code) ){
 		exists $bcast{$code}
 			&& $bcast{$code}
-			&& $bcast{$code}->( $self, $code, $data );
+			&& $bcast{$code}->( $self, $data );
 	} else {
-		push @{$self->{response}}, $data;
+		if( length($data) ){
+			my $u = decode('latin1', $data);
+			push @{$self->{response}}, $u;
+		}
 		$self->_done( code_ok($code) ) unless $cont eq '-';
 	}
 
@@ -327,10 +340,13 @@ sub _next {
 
 	DEBUG && print STDERR "_next: ".$a->{cmd}."\n";
 
-	$self->{sock}->push_write( $a->{cmd}."\n" );
+	$self->{sock}->push_write( encode('latin1',$a->{cmd})."\n" );
 }
 
-sub unshift {
+############################################################
+# raw commands:
+
+sub unshift_raw {
 	my( $self, $cmd, $cb ) = @_;
 
 	unshift @{$self->{queue}}, {
@@ -342,7 +358,7 @@ sub unshift {
 	return 1;
 }
 
-sub push {
+sub push_raw {
 	my( $self, $cmd, $cb ) = @_;
 
 	push @{$self->{queue}}, {
@@ -354,16 +370,19 @@ sub push {
 	return 1;
 }
 
+############################################################
+# actual commands:
+
 sub login {
 	my( $self, $cb ) = @_;
 
-	$self->unshift( "user $self->{user}", sub {
+	$self->unshift_raw( "user $self->{user}", sub {
 		if( !$_[0] ){
 			$self->disconnect( "login failed");
 			return;
 		}
 
-		$self->unshift( "pass $self->{pass}", sub {
+		$self->unshift_raw( "pass $self->{pass}", sub {
 			if( !$_[0] ){
 				$self->disconnect( "login failed");
 				return;
@@ -375,11 +394,10 @@ sub login {
 	});
 };
 
-
 sub status {
 	my( $self, $cb ) = @_;
 
-	$self->push('status', sub {
+	$self->push_raw('status', sub {
 		my( $ok, $d ) = @_;
 		$cb && $cb->( $ok && $d->[0] < @status
 			? $status[$d->[0]] : undef );
@@ -388,26 +406,58 @@ sub status {
 
 sub play {
 	my( $self, $cb ) = @_;
-
-	$self->push('play', $cb );
+	$self->push_raw('play', $cb );
 }
 
 sub pause {
 	my( $self, $cb ) = @_;
-
-	$self->push('pause', $cb );
-}
-
-sub next {
-	my( $self, $cb ) = @_;
-
-	$self->push('next', $cb );
+	$self->push_raw('pause', $cb );
 }
 
 sub stop {
 	my( $self, $cb ) = @_;
+	$self->push_raw('stop', $cb );
+}
 
-	$self->push('stop', $cb );
+sub next {
+	my( $self, $cb ) = @_;
+	$self->push_raw('next', $cb );
+}
+
+sub sfilterlist {
+	my( $self, $cb ) = @_;
+	$self->push_raw('sfilterlist', ! $cb ? undef : sub {
+		my( $ok, $d ) = @_;
+		if( ! $ok ){
+			$cb->();
+			return;
+		}
+		my %res;
+		foreach my $r ( @$d ){
+			my %e;
+			@e{qw/id name filter/} = split /$re_sep/, $r;
+			$e{id} or next;
+			$res{$e{id}} =  \%e;
+		}
+		$cb->(\%res);
+	});
+}
+
+sub filter {
+	my( $self, $cb ) = @_;
+	$self->push_raw("filter", ! $cb ? undef : sub {
+		my( $ok, $d ) = @_;
+		if( ! $ok ){
+			$cb->();
+			return;
+		}
+		$cb->($d->[0]);
+	});
+}
+
+sub filterset {
+	my( $self, $filter, $cb ) = @_;
+	$self->push_raw("filterset $filter", $cb );
 }
 
 # TODO: more commands
