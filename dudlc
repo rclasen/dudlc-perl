@@ -11,16 +11,16 @@ my $dudl = AnyEvent::Dudlc->new(
 	user		=> 'lirc',
 	pass		=> 'lirc',
 	on_connected	=> sub {
-		print "connected\n";
+		print STDERR "connected\n";
 	},
 	on_authenticated	=> sub {
-		print "authenticated\n";
+		print STDERR "authenticated\n";
 	},
 	on_error	=> sub {
-		print "error: @_\n";
+		print STDERR "error: @_\n";
 	},
 	on_disconnect	=> sub {
-		print "disconnected\n";
+		print STDERR "disconnected\n";
 	},
 	on_status	=> sub {
 		print "status: @_\n";
@@ -30,15 +30,15 @@ my $dudl = AnyEvent::Dudlc->new(
 	},
 );
 
-my $a = AnyEvent->timer(
-	after	=> 10,
-	cb	=> sub { $dudl->play },
-);
-my $b = AnyEvent->timer(
-	after	=> 20,
-	cb	=> sub { $dudl->pause },
-);
-
+#my $a = AnyEvent->timer(
+#	after	=> 10,
+#	cb	=> sub { $dudl->play },
+#);
+#my $b = AnyEvent->timer(
+#	after	=> 20,
+#	cb	=> sub { $dudl->pause },
+#);
+#
 
 AnyEvent::Loop::run;
 

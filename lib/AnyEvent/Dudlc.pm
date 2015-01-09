@@ -130,6 +130,8 @@ sub new {
 		active	=> undef,
 	}, ref $proto || $proto;
 
+	$self->connect;
+
 	return $self;
 }
 
@@ -174,6 +176,7 @@ sub connect {
 
 			if( !$ok ){
 				$self->disconnect( "no greeting");
+				$self->start_reconnect;
 				return;
 			}
 
@@ -182,11 +185,13 @@ sub connect {
 
 			if( $id ne 'dudld' ){
 				$self->disconnect( "bad greeting");
+				$self->start_reconnect;
 				return;
 			}
 
 			if( $ma !=2 ){
 				$self->disconnect( "bad protocol version: $ma.$mi");
+				$self->start_reconnect;
 				return;
 			}
 
@@ -207,6 +212,7 @@ sub connect {
 			$self->{active}
 				or return;
 			$self->disconnect( 'command timed out' );
+			$self->start_reconnect;
 		},
 		on_error	=> sub {
 			my( $h, $fatal, $msg ) = @_;
@@ -272,6 +278,7 @@ sub _read {
 	DEBUG && print STDERR "got ok=$scode, cont=$cont, data=$data\n";
 	if( ! defined $scode ){
 		$self->disconnect( "bad response: $line");
+		$self->start_reconnect;
 		return;
 	}
 
@@ -309,10 +316,8 @@ sub _done {
 sub _next {
 	my( $self ) = @_;
 
-	if( ! $self->{sock} ){
-		$self->connect;
-		return;
-	}
+	$self->{sock}
+		or return;
 
 	$self->{active}
 		and return;
