@@ -100,7 +100,7 @@ use AnyEvent;
 use AnyEvent::Handle;
 use Encode;
 
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 sub DEBUG(){0}
 #sub DEBUG(){1}

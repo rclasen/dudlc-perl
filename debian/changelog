@@ -1,3 +1,9 @@
+libanyevent-dudlc-perl (0.02) unstable; urgency=low
+
+  * fixes
+
+ -- Rainer Clasen <bj@zuto.de>  Wed, 04 Mar 2015 08:01:33 +0100
+
 libanyevent-dudlc-perl (0.01) unstable; urgency=low
 
   * initial release
