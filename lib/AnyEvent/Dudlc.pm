@@ -291,15 +291,15 @@ sub _read {
 		$self->start_reconnect;
 		return;
 	}
+	my $u = decode('latin1', $data);
 
 	my $code = int $scode;
 	if( code_bcast($code) ){
 		exists $bcast{$code}
 			&& $bcast{$code}
-			&& $bcast{$code}->( $self, $data );
+			&& $bcast{$code}->( $self, $u );
 	} else {
 		if( length($data) ){
-			my $u = decode('latin1', $data);
 			push @{$self->{response}}, $u;
 		}
 		$self->_done( code_ok($code) ) unless $cont eq '-';
