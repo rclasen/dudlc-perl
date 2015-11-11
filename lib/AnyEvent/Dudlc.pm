@@ -102,8 +102,12 @@ use Encode;
 
 our $VERSION = 0.02;
 
-sub DEBUG(){0}
-#sub DEBUG(){1}
+# inlined: sub DEBUG(){1 or 0} based on ENV:
+BEGIN {
+	no strict 'refs';
+	*DEBUG = $ENV{ANYEVENT_DUDLC_DEBUG} ? sub(){1} : sub(){0};
+}
+sub DPRINT { DEBUG && print STDERR $_[0]."\n"; }
 
 sub new {
 	my( $proto, %a ) = @_;
@@ -148,7 +152,7 @@ sub DESTROY {
 sub disconnect {
 	my( $self, $msg ) = @_;
 
-	DEBUG && print STDERR "disconnect: $msg\n";
+	DEBUG && DPRINT "disconnect: $msg";
 	if( $self->{sock} ){
 		$self->{on_error} && $self->{on_error}->($msg) if $msg;
 		$self->{on_disconnect} && $self->{on_disconnect}->();
@@ -182,7 +186,7 @@ sub connect {
 				return;
 			}
 
-			DEBUG && print STDERR "greeting: ".$d->[0]."\n";
+			DEBUG && DPRINT "greeting: ".$d->[0];
 			my( $id, $ma, $mi ) = split/\s/,$d->[0];
 
 			if( $id ne 'dudld' ){
@@ -283,9 +287,9 @@ sub _read {
 	$self->{sock}
 		or return;
 
-	#DEBUG && print STDERR "got line: $line\n";
+	#DEBUG && DPRINT "got line: $line";
 	my( $scode, $cont, $data ) = $line =~ /$re_line/;
-	DEBUG && print STDERR "got ok=$scode, cont=$cont, data=$data\n";
+	DEBUG && DPRINT "got ok=$scode, cont=$cont, data=$data";
 	if( ! defined $scode ){
 		$self->disconnect( "bad response: $line");
 		$self->start_reconnect;
@@ -318,7 +322,7 @@ sub _done {
 	my $a = $self->{active}
 		or return;
 
-	DEBUG && print STDERR "_done, ok=$code: $a->{cmd}\n";
+	DEBUG && DPRINT "_done, ok=$code: $a->{cmd}";
 	$a->{cb} && $a->{cb}->($code, $self->{response});
 	$self->{response} = [];
 	$self->{active} = undef;
@@ -338,7 +342,7 @@ sub _next {
 	my $a = $self->{active} = shift @{$self->{queue}}
 		or return;
 
-	DEBUG && print STDERR "_next: ".$a->{cmd}."\n";
+	DEBUG && DPRINT "_next: ".$a->{cmd};
 
 	$self->{sock}->push_write( encode('latin1',$a->{cmd})."\n" );
 }
