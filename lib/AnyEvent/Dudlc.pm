@@ -101,7 +101,7 @@ use AnyEvent::Handle;
 use AnyEvent::Socket;
 use Encode;
 
-our $VERSION = 0.04;
+our $VERSION = 0.05;
 
 # inlined: sub DEBUG(){1 or 0} based on ENV:
 BEGIN {
@@ -213,7 +213,7 @@ sub connect {
 		keepalive	=> 1,
 		on_connect	=> sub {
 			my( $h, $host, $port, $retry ) = @_;
-			$self->{on_connected} && $self->{on_connected}->($self);
+			$self->{on_connected} && $self->{on_connected}->($self, $host, $port );
 			$h->push_read( line => sub { $self->_read($_[1]) } );
 		},
 		on_timeout	=> sub {
