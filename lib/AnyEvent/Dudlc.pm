@@ -118,7 +118,7 @@ sub new {
 		user	=> $a{user},
 		pass	=> $a{pass},
 		reconnect	=> $a{reconnect}||10,
-		timeout	=> $a{timeout}||60,
+		timeout	=> $a{timeout}||30,
 		# connection callbacks:
 		on_connected	=> $a{on_connected},
 		on_authenticated	=> $a{on_authenticated},
@@ -145,7 +145,7 @@ sub DESTROY {
 	my( $self ) = @_;
 
 	$self->{rwatch} = undef;
-	$self->disconnect;
+	$self->disconnect('destroy');
 	return;
 }
 
@@ -170,7 +170,7 @@ sub disconnect {
 sub connect {
 	my( $self ) = @_;
 
-	$self->disconnect
+	$self->disconnect('reconnect')
 		if $self->{sock};
 
 	$self->{rwatch} = undef;
@@ -222,7 +222,7 @@ sub connect {
 		},
 		on_error	=> sub {
 			my( $h, $fatal, $msg ) = @_;
-			$self->disconnect( $msg );
+			$self->disconnect( 'socket error: '. $msg );
 			$self->start_reconnect;
 		},
 		on_eof		=> sub {
