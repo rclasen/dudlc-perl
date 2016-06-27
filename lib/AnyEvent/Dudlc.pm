@@ -98,9 +98,10 @@ use strict;
 use Carp;
 use AnyEvent;
 use AnyEvent::Handle;
+use AnyEvent::Socket;
 use Encode;
 
-our $VERSION = 0.02;
+our $VERSION = 0.04;
 
 # inlined: sub DEBUG(){1 or 0} based on ENV:
 BEGIN {
@@ -144,6 +145,7 @@ sub new {
 sub DESTROY {
 	my( $self ) = @_;
 
+	DEBUG && DPRINT "destroy $self";
 	$self->{rwatch} = undef;
 	$self->disconnect('destroy');
 	return;
@@ -154,8 +156,8 @@ sub disconnect {
 
 	DEBUG && DPRINT "disconnect: $msg";
 	if( $self->{sock} ){
-		$self->{on_error} && $self->{on_error}->($msg) if $msg;
-		$self->{on_disconnect} && $self->{on_disconnect}->();
+		$self->{on_error} && $self->{on_error}->($msg, $self) if $msg;
+		$self->{on_disconnect} && $self->{on_disconnect}->($self);
 		$self->{sock}->destroy;
 	}
 
@@ -211,7 +213,7 @@ sub connect {
 		keepalive	=> 1,
 		on_connect	=> sub {
 			my( $h, $host, $port, $retry ) = @_;
-			$self->{on_connected} && $self->{on_connected}->();
+			$self->{on_connected} && $self->{on_connected}->($self);
 			$h->push_read( line => sub { $self->_read($_[1]) } );
 		},
 		on_timeout	=> sub {
@@ -248,6 +250,20 @@ sub start_reconnect {
 	return;
 }
 
+sub getsockname {
+	my( $self ) = @_;
+
+	$self->{sock}
+		or return;
+
+	my $fh = $self->{sock}->fh
+		or return;
+
+	my( $service, $local ) = AnyEvent::Socket::unpack_sockaddr( getsockname($fh) );
+
+	return( $service, format_address($local) );
+}
+
 ############################################################
 # protocol handling
 
@@ -264,19 +280,19 @@ our %bcast = (
 	},
 	641	=> sub {
 		my( $self, $data ) = @_;
-		$self->{on_status} && $self->{on_status}->('stopped');
+		$self->{on_status} && $self->{on_status}->('stopped', $self);
 	},
 	642	=> sub {
 		my( $self, $data ) = @_;
-		$self->{on_status} && $self->{on_status}->('paused');
+		$self->{on_status} && $self->{on_status}->('paused', $self);
 	},
 	643	=> sub {
 		my( $self, $data ) = @_;
-		$self->{on_status} && $self->{on_status}->('playing');
+		$self->{on_status} && $self->{on_status}->('playing', $self);
 	},
 	650	=> sub {
 		my( $self, $data ) = @_;
-		$self->{on_filter} && $self->{on_filter}->($data);
+		$self->{on_filter} && $self->{on_filter}->($data, $self);
 	},
 	# TODO: other bcast
 );
@@ -392,7 +408,7 @@ sub login {
 				return;
 			}
 
-			$self->{on_authenticated} && $self->{on_authenticated}->();
+			$self->{on_authenticated} && $self->{on_authenticated}->($self);
 			$cb && $cb->(@_);
 		});
 	});

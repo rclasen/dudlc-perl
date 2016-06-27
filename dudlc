@@ -12,7 +12,9 @@ my $dudl = AnyEvent::Dudlc->new(
 	user		=> 'lirc',
 	pass		=> 'lirc',
 	on_connected	=> sub {
-		print STDERR "connected\n";
+		my( $self ) = @_;
+		my( $p, $h ) = $self->getsockname;
+		print STDERR "connected from $h:$p\n";
 	},
 	on_authenticated	=> sub {
 		print STDERR "authenticated\n";
