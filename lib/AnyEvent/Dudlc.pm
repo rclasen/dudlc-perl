@@ -155,6 +155,8 @@ sub disconnect {
 	my( $self, $msg ) = @_;
 
 	DEBUG && DPRINT "disconnect: $msg";
+	$self->{rwatch} = undef;
+
 	if( $self->{sock} ){
 		$self->{on_error} && $self->{on_error}->($msg, $self) if $msg;
 		$self->{on_disconnect} && $self->{on_disconnect}->($self);
@@ -177,14 +179,17 @@ sub connect {
 
 	$self->{rwatch} = undef;
 
+	Scalar::Util::weaken( my $weak = $self );
+
 	$self->{active} = {
 		cmd	=> 'connect',
 		cb	=> sub {
 			my( $ok, $d ) = @_;
+			$weak or return;
 
 			if( !$ok ){
-				$self->disconnect( "no greeting");
-				$self->start_reconnect;
+				$weak->disconnect( "no greeting");
+				$weak->start_reconnect;
 				return;
 			}
 
@@ -192,18 +197,18 @@ sub connect {
 			my( $id, $ma, $mi ) = split/\s/,$d->[0];
 
 			if( $id ne 'dudld' ){
-				$self->disconnect( "bad greeting");
-				$self->start_reconnect;
+				$weak->disconnect( "bad greeting");
+				$weak->start_reconnect;
 				return;
 			}
 
 			if( $ma !=2 ){
-				$self->disconnect( "bad protocol version: $ma.$mi");
-				$self->start_reconnect;
+				$weak->disconnect( "bad protocol version: $ma.$mi");
+				$weak->start_reconnect;
 				return;
 			}
 
-			$self->login;
+			$weak->login;
 		},
 	};
 
@@ -213,23 +218,30 @@ sub connect {
 		keepalive	=> 1,
 		on_connect	=> sub {
 			my( $h, $host, $port, $retry ) = @_;
-			$self->{on_connected} && $self->{on_connected}->($self, $host, $port );
-			$h->push_read( line => sub { $self->_read($_[1]) } );
+			$weak or return;
+			$weak->{on_connected} && $weak->{on_connected}->($weak, $host, $port );
+			$h->push_read( line => sub {
+				$weak or return;
+				$weak->_read($_[1]);
+			} );
 		},
 		on_timeout	=> sub {
-			$self->{active}
+			$weak or return;
+			$weak->{active}
 				or return;
-			$self->disconnect( 'command timed out' );
-			$self->start_reconnect;
+			$weak->disconnect( 'command timed out' );
+			$weak->start_reconnect;
 		},
 		on_error	=> sub {
 			my( $h, $fatal, $msg ) = @_;
-			$self->disconnect( 'socket error: '. $msg );
-			$self->start_reconnect;
+			$weak or return;
+			$weak->disconnect( 'socket error: '. $msg );
+			$weak->start_reconnect;
 		},
 		on_eof		=> sub {
-			$self->disconnect( 'EOF' );
-			$self->start_reconnect;
+			$weak or return;
+			$weak->disconnect( 'EOF' );
+			$weak->start_reconnect;
 		},
 	);
 
@@ -242,9 +254,14 @@ sub start_reconnect {
 	$self->{reconnect}
 		or return;
 
+	Scalar::Util::weaken( my $weak = $self );
+
 	$self->{rwatch} = AnyEvent->timer(
 		after		=> $self->{reconnect},
-		cb		=> sub { $self->connect },
+		cb		=> sub {
+			$weak or return;
+			$weak->connect;
+		},
 	);
 
 	return;
@@ -303,6 +320,8 @@ sub _read {
 	$self->{sock}
 		or return;
 
+	Scalar::Util::weaken( my $weak = $self );
+
 	#DEBUG && DPRINT "got line: $line";
 	my( $scode, $cont, $data ) = $line =~ /$re_line/;
 	DEBUG && DPRINT "got ok=$scode, cont=$cont, data=$data";
@@ -325,9 +344,12 @@ sub _read {
 		$self->_done( code_ok($code) ) unless $cont eq '-';
 	}
 
+
 	# wait... if there wasn't an error
-	$self->{sock}->push_read( line => sub { $self->_read( $_[1] ) } )
-		if $self->{sock};
+	$self->{sock}->push_read( line => sub {
+		$weak or return;
+		$weak->_read( $_[1] );
+	} ) if $self->{sock};
 
 	return;
 }
@@ -396,19 +418,27 @@ sub push_raw {
 sub login {
 	my( $self, $cb ) = @_;
 
+	Scalar::Util::weaken( my $weak = $self );
+
 	$self->unshift_raw( "user $self->{user}", sub {
 		if( !$_[0] ){
-			$self->disconnect( "login failed");
+			$weak or return;
+
+			$weak->disconnect( "login failed");
 			return;
 		}
 
-		$self->unshift_raw( "pass $self->{pass}", sub {
+		Scalar::Util::weaken( my $weaker = $weak );
+
+		$weak->unshift_raw( "pass $weak->{pass}", sub {
+			$weaker or return;
+
 			if( !$_[0] ){
-				$self->disconnect( "login failed");
+				$weaker->disconnect( "login failed");
 				return;
 			}
 
-			$self->{on_authenticated} && $self->{on_authenticated}->($self);
+			$weaker->{on_authenticated} && $weaker->{on_authenticated}->($weaker);
 			$cb && $cb->(@_);
 		});
 	});

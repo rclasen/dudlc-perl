@@ -3,9 +3,22 @@
 use strict;
 use warnings;
 
+BEGIN {
+	$ENV{ANYEVENT_DUDLC_DEBUG} = 1;
+}
+
 use AnyEvent::Loop;
 use AnyEvent::Dudlc;
 use Data::Dumper;
+use Devel::Cycle;
+use Scalar::Util;
+use Devel::Leak;
+
+my $handle;
+#my $count = Devel::Leak::NoteSV($handle);
+
+
+my $done;
 
 my $dudl = AnyEvent::Dudlc->new(
 	host		=> 'localhost',
@@ -20,7 +33,8 @@ my $dudl = AnyEvent::Dudlc->new(
 		print STDERR "authenticated\n";
 	},
 	on_error	=> sub {
-		print STDERR "error: @_\n";
+		my( $msg, $self ) = @_;
+		print STDERR "error: $msg\n";
 	},
 	on_disconnect	=> sub {
 		print STDERR "disconnected\n";
@@ -36,26 +50,38 @@ my $dudl = AnyEvent::Dudlc->new(
 	},
 );
 
+Scalar::Util::weaken( my $weak = $dudl );
+
 my $a = AnyEvent->timer(
 	after	=> 5,
 	cb	=> sub {
 		print STDERR "timer\n";
-		$dudl->sfilterlist( sub {
+		$weak->sfilterlist( sub {
 			print Dumper(@_);
 		});
-		$dudl->filterset( 'tag="hot"', sub {
+		$weak->filterset( 'tag="hot"', sub {
 			print "filterset: @_\n";
-			$dudl->filter( sub{
+			$weak->filter( sub{
 				print "filter: @_\n";
 			});
 		});
 	},
 );
-#my $b = AnyEvent->timer(
-#	after	=> 20,
-#	cb	=> sub { $dudl->pause },
-#);
-#
+my $b = AnyEvent->timer(
+	after	=> 20,
+	cb	=> sub {
+		++$done;
+		$weak->pause;
+	},
+);
 
-AnyEvent::Loop::run;
+
+while( ! $done ){
+	AnyEvent::Loop::one_event;
+}
+
+find_cycle( $dudl);
+undef $dudl;
+
+#Devel::Leak::CheckSV($handle);
 
